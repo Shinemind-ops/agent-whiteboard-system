@@ -1,0 +1,81 @@
+{
+  "name": "白板系統進化包",
+  "version": "2.0.1",
+  "evolution_ids": [
+    "E-356",
+    "E-357",
+    "E-358"
+  ],
+  "archive_refs": [
+    "B-297",
+    "B-298"
+  ],
+  "produced_by": "Shinemind（閃耀之心）",
+  "produced_at": "2026-11-09",
+  "upgraded_at": "2026-11-10 01:46",
+  "summary": "把每輪該守的規則搬到唯一自動注入的 AGENTS.md；11 欄骨架逼白板只講有用；機械驗證器抓死板。",
+  "requires": {
+    "python": ">=3.7"
+  },
+  "install": "python install.py --dry-run && python install.py",
+  "verify": "python verify.py",
+  "runtime_check": "python <hermes>/scripts/verify_whiteboard.py --session $HERMES_SESSION_ID",
+  "verify_items": 23,
+  "runtime_check_items": 5,
+  "changelog": [
+    {
+      "version": "1.0",
+      "date": "2026-11-09",
+      "note": "E-356 建立：RULES.md → AGENTS.md + 自由格式白板 + 五步開場 + 宣佈白板"
+    },
+    {
+      "version": "2.0",
+      "date": "2026-11-10",
+      "note": "E-358 升級：11 欄骨架寫死、廢日期流水節、B5 強制更新報告 11 項、新增 verify_whiteboard.py 機械驗證、install 6 步、verify 23 項"
+    },
+    {
+      "version": "2.0.1",
+      "date": "2026-11-10",
+      "change": "install.py 修兩個路徑 bug：移除死常量 PLACEHOLDER_WB（值為雙反斜線的寫死本機路徑、實際從未使用）；PLACEHOLDER_HERMES 改為 fallback_hermes() 通用推導（Windows=~/AppData/Local/hermes，其他=~/.local/share/hermes），通用包不再寫死任何一部機的路徑。功能不變，實裝 23/23 PASS。"
+    }
+  ],
+  "files": {
+    "install.py": {
+      "bytes": 10373,
+      "sha256": "acd446f29a5c0296c5e89453867e4b1b84d4cf097093b5fa35bc116f3a55e450"
+    },
+    "README.md": {
+      "bytes": 14223,
+      "sha256": "2ac3e89397cf71e5c822e0079b05f5f79a947e168c14c560ad8389c5b1a85651"
+    },
+    "verify.py": {
+      "bytes": 6666,
+      "sha256": "e60c4709597dcb66be404b73ff0986fcae5287ea68562c85e7e75def02cd160c"
+    },
+    "payload/AGENTS-要插入的段落.md": {
+      "bytes": 3825,
+      "sha256": "e6e672c6e40c4dcd535651b549a18cc5bd8e5bff0d5b75645cbf3224511e6080"
+    },
+    "payload/RULES-退役公告.md": {
+      "bytes": 1012,
+      "sha256": "eabe018f429771d6043f907061c82146bf0ea00ff4857460217cc2b92b67fa06"
+    },
+    "payload/SKILL.md": {
+      "bytes": 14925,
+      "sha256": "beaa925740758666d2bb069ccb2afc85147ed559160cea2baab68735615f4c5b"
+    },
+    "payload/verify_whiteboard.py": {
+      "bytes": 8386,
+      "sha256": "b7f077fff99c7d3fd159f0f36616ca556655d0fca383bbc5127b2b5c53b29c72"
+    },
+    "payload/模板-白板.md": {
+      "bytes": 1234,
+      "sha256": "17a2da88cbae248dad6adc6d2842a729141c5e623468629cf2381509630da8fe"
+    },
+    "payload/模板-白板索引.md": {
+      "bytes": 1259,
+      "sha256": "4ac0c6de8f93a97c60dc9bc9d35c1f152ca1ce356fb77b9657e9e86373e182ff"
+    }
+  },
+  "note_files": "files 不含 manifest.json 自身（自我 hash 無意義）"
+}
