@@ -1,6 +1,6 @@
 {
   "name": "白板系統進化包",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "evolution_ids": [
     "E-356",
     "E-357",
@@ -12,7 +12,7 @@
   ],
   "produced_by": "Shinemind（閃耀之心）",
   "produced_at": "2026-11-09",
-  "upgraded_at": "2026-11-10 01:46",
+  "upgraded_at": "2026-11-10 03:10",
   "summary": "把每輪該守的規則搬到唯一自動注入的 AGENTS.md；11 欄骨架逼白板只講有用；機械驗證器抓死板。",
   "requires": {
     "python": ">=3.7"
@@ -20,7 +20,7 @@
   "install": "python install.py --dry-run && python install.py",
   "verify": "python verify.py",
   "runtime_check": "python <hermes>/scripts/verify_whiteboard.py --session $HERMES_SESSION_ID",
-  "verify_items": 23,
+  "verify_items": 22,
   "runtime_check_items": 5,
   "changelog": [
     {
@@ -37,20 +37,21 @@
       "version": "2.0.1",
       "date": "2026-11-10",
       "change": "install.py 修兩個路徑 bug：移除死常量 PLACEHOLDER_WB（值為雙反斜線的寫死本機路徑、實際從未使用）；PLACEHOLDER_HERMES 改為 fallback_hermes() 通用推導（Windows=~/AppData/Local/hermes，其他=~/.local/share/hermes），通用包不再寫死任何一部機的路徑。功能不變，實裝 23/23 PASS。"
+    },
+    {
+      "version": "2.1.0",
+      "date": "2026-11-10",
+      "change": "verify.py 修同源 bug 並重寫路徑檢查：刪除兩個寫死本機用戶名的常量（PLACEHOLDER_WB / PLACEHOLDER_HERMES）；舊邏輯 replace('\\\\\\\\','/') 只換雙反斜線，導致檢查永遠 PASS（等於廢的）。新邏輯以「路徑內的用戶名是否等於當前用戶」判斷，不寫死任何具體名字，並補負向測試（塞 C:\\Users\\SomeGuy 會 FAIL）。兩條檢查合併為一條，verify_items 23→22。"
     }
   ],
   "files": {
+    "README.md": {
+      "bytes": 14223,
+      "sha256": "37b1c3771681185a44d178dbe8b8ebf72463b9e2c73d6d2d695f0fecf6a5ac69"
+    },
     "install.py": {
       "bytes": 10373,
       "sha256": "acd446f29a5c0296c5e89453867e4b1b84d4cf097093b5fa35bc116f3a55e450"
-    },
-    "README.md": {
-      "bytes": 14223,
-      "sha256": "2ac3e89397cf71e5c822e0079b05f5f79a947e168c14c560ad8389c5b1a85651"
-    },
-    "verify.py": {
-      "bytes": 6666,
-      "sha256": "e60c4709597dcb66be404b73ff0986fcae5287ea68562c85e7e75def02cd160c"
     },
     "payload/AGENTS-要插入的段落.md": {
       "bytes": 3825,
@@ -75,6 +76,10 @@
     "payload/模板-白板索引.md": {
       "bytes": 1259,
       "sha256": "4ac0c6de8f93a97c60dc9bc9d35c1f152ca1ce356fb77b9657e9e86373e182ff"
+    },
+    "verify.py": {
+      "bytes": 6969,
+      "sha256": "043043515e43059562446547d256416cf7f3cf87c6a408c587cfd2c6145c2d52"
     }
   },
   "note_files": "files 不含 manifest.json 自身（自我 hash 無意義）"
