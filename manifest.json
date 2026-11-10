@@ -1,6 +1,6 @@
 {
-  "name": "白板系統進化包",
-  "version": "2.1.0",
+  "name": "Whiteboard System",
+  "version": "2.2.0",
   "evolution_ids": [
     "E-356",
     "E-357",
@@ -12,8 +12,8 @@
   ],
   "produced_by": "Shinemind（閃耀之心）",
   "produced_at": "2026-11-09",
-  "upgraded_at": "2026-11-10 03:10",
-  "summary": "把每輪該守的規則搬到唯一自動注入的 AGENTS.md；11 欄骨架逼白板只講有用；機械驗證器抓死板。",
+  "upgraded_at": "2026-11-10 03:3x",
+  "summary": "Persistent working memory for long-running AI agents: an 11-field per-session markdown board plus a mechanical validator that fails on stale or malformed boards.",
   "requires": {
     "python": ">=3.7"
   },
@@ -42,44 +42,57 @@
       "version": "2.1.0",
       "date": "2026-11-10",
       "change": "verify.py 修同源 bug 並重寫路徑檢查：刪除兩個寫死本機用戶名的常量（PLACEHOLDER_WB / PLACEHOLDER_HERMES）；舊邏輯 replace('\\\\\\\\','/') 只換雙反斜線，導致檢查永遠 PASS（等於廢的）。新邏輯以「路徑內的用戶名是否等於當前用戶」判斷，不寫死任何具體名字，並補負向測試（塞 C:\\Users\\SomeGuy 會 FAIL）。兩條檢查合併為一條，verify_items 23→22。"
+    },
+    {
+      "version": "2.2.0",
+      "date": "2026-11-10",
+      "change": "Public-release hardening: English README (Chinese preserved as README.zh.md), MIT LICENSE, payload filenames anglicised (AGENTS-template / template-board / template-index / RULES-retirement), manifest hashes recomputed for 11 files. No behavioural change to the validator or installer."
     }
   ],
   "files": {
     "README.md": {
+      "bytes": 11454,
+      "sha256": "aef78727cc4fe5b94f995326f9be81f89d854a8d66818ffe6499d72182224a73"
+    },
+    "README.zh.md": {
       "bytes": 14223,
       "sha256": "37b1c3771681185a44d178dbe8b8ebf72463b9e2c73d6d2d695f0fecf6a5ac69"
     },
+    "LICENSE": {
+      "bytes": 1066,
+      "sha256": "56ac3d87ddaf2ddced6d2f6bf762b43c3c86701b85f7f82c6192f45948d2d84d"
+    },
     "install.py": {
-      "bytes": 10373,
-      "sha256": "acd446f29a5c0296c5e89453867e4b1b84d4cf097093b5fa35bc116f3a55e450"
+      "bytes": 10357,
+      "sha256": "39d716065e2ab876694776f952ae22d43db325847f018ef1010ed35b19ffd704"
     },
-    "payload/AGENTS-要插入的段落.md": {
-      "bytes": 3825,
-      "sha256": "e6e672c6e40c4dcd535651b549a18cc5bd8e5bff0d5b75645cbf3224511e6080"
-    },
-    "payload/RULES-退役公告.md": {
-      "bytes": 1012,
-      "sha256": "eabe018f429771d6043f907061c82146bf0ea00ff4857460217cc2b92b67fa06"
+    "verify.py": {
+      "bytes": 6969,
+      "sha256": "043043515e43059562446547d256416cf7f3cf87c6a408c587cfd2c6145c2d52"
     },
     "payload/SKILL.md": {
       "bytes": 14925,
       "sha256": "beaa925740758666d2bb069ccb2afc85147ed559160cea2baab68735615f4c5b"
     },
+    "payload/AGENTS-template.md": {
+      "bytes": 3825,
+      "sha256": "e6e672c6e40c4dcd535651b549a18cc5bd8e5bff0d5b75645cbf3224511e6080"
+    },
     "payload/verify_whiteboard.py": {
       "bytes": 8386,
       "sha256": "b7f077fff99c7d3fd159f0f36616ca556655d0fca383bbc5127b2b5c53b29c72"
     },
-    "payload/模板-白板.md": {
+    "payload/template-board.md": {
       "bytes": 1234,
       "sha256": "17a2da88cbae248dad6adc6d2842a729141c5e623468629cf2381509630da8fe"
     },
-    "payload/模板-白板索引.md": {
+    "payload/template-index.md": {
       "bytes": 1259,
       "sha256": "4ac0c6de8f93a97c60dc9bc9d35c1f152ca1ce356fb77b9657e9e86373e182ff"
     },
-    "verify.py": {
-      "bytes": 6969,
-      "sha256": "043043515e43059562446547d256416cf7f3cf87c6a408c587cfd2c6145c2d52"
+    "payload/RULES-retirement.md": {
+      "bytes": 1012,
+      "sha256": "eabe018f429771d6043f907061c82146bf0ea00ff4857460217cc2b92b67fa06"
     }
   },
   "note_files": "files 不含 manifest.json 自身（自我 hash 無意義）"

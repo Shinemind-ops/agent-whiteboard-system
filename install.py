@@ -116,7 +116,7 @@ def main():
     say('  本 session id : {}'.format(sid))
 
     # --- 1. 讀 payload ---
-    segs = read(os.path.join(PAYLOAD, 'AGENTS-要插入的段落.md'))
+    segs = read(os.path.join(PAYLOAD, 'AGENTS-template.md'))
     segB1 = extract_section(segs, '### B1 · 開場', '## 安裝位置') or ''
     segB5 = extract_section(segs, '#### 每輪最後一句', '## 安裝位置') or ''
     segB1 = segB1.split('\n---\n')[0].rstrip()
@@ -214,7 +214,7 @@ def main():
     if not a.dry_run:
         os.makedirs(os.path.join(wb, '歸檔'), exist_ok=True)
         if not os.path.exists(wb_file):
-            tpl = read(os.path.join(PAYLOAD, '模板-白板.md'))
+            tpl = read(os.path.join(PAYLOAD, 'template-board.md'))
             now = datetime.datetime.now()
             body = (tpl.replace('<SESSION_ID>', sid)
                        .replace('<YYYY-MM-DD HH:MM>', now.strftime('%Y-%m-%d %H:%M'))
@@ -225,7 +225,7 @@ def main():
         else:
             say('    白板已存在 → {}'.format(wb_file))
         if not os.path.exists(idx_file):
-            idx = read(os.path.join(PAYLOAD, '模板-白板索引.md')).replace('<白板根>', wb)
+            idx = read(os.path.join(PAYLOAD, 'template-index.md')).replace('<白板根>', wb)
             write(idx_file, idx)
             say('    新建索引 → {}'.format(idx_file))
         else:
@@ -238,7 +238,7 @@ def main():
         say('    發現舊 RULES.md（{}）— 內容已遷入 AGENTS.md'.format(old_rules))
         if not a.dry_run:
             backup(old_rules)
-            notice = read(os.path.join(PAYLOAD, 'RULES-退役公告.md')).replace(
+            notice = read(os.path.join(PAYLOAD, 'RULES-retirement.md')).replace(
                 '<日期>', datetime.date.today().isoformat())
             write(old_rules, notice)
             say('    已改寫成退役公告（原文留 .bak）')

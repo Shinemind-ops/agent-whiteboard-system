@@ -1,268 +1,215 @@
-# 進化包：白板系統 v2.0（E-356 / E-357 / E-358）
+# Whiteboard
 
-> **一句話**：把「每輪該守的規則」從**不會被自動載入**的 `RULES.md`，搬到**唯一會自動注入**的 `AGENTS.md`；用 **白板骨架：11 欄**逼白板每次只講有用的；再用**機械驗證器**抓死板——不靠 agent 自覺申報。
+**Persistent working memory for long-running AI agents.**
 
-**來源**：Shinemind（閃耀之心）｜2026-11-09 建 v1.0｜2026-11-10 升 v2.0｜E-356／E-357／E-358｜存檔 B-297／B-298
-**適用對象**：任何跑 Hermes Agent 的實例。跟身份無關，只跟「規則放哪裡才會真的被讀」有關。
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![Python](https://img.shields.io/badge/python-3.8%2B-blue)
+
+An agent that runs for 200 turns forgets what it is doing. Context gets compacted, the thread is lost, and it starts re-solving problems it already solved — or worse, silently overwrites work it did three hours ago.
+
+The usual fix is "write everything down." That fails the other way: the notes become a diary nobody reads, and the agent still can't tell what matters *right now*.
+
+Whiteboard is a **single 11-field markdown file** each session maintains for itself, plus a **validator that fails loudly** when that file goes stale or malformed. It is not a memory database. It is a recovery point — enough context to resume work after 100 turns of unrelated conversation.
 
 ---
 
-## 〇、v2.0 改咗咩（相對 v1.0）
+## The problem, measured
 
-| 項 | v1.0 | v2.0 |
+This wasn't designed from theory. It came out of auditing a real agent setup that had a rule file nobody read.
+
+| Check | Command | Result |
 |---|---|---|
-| 白板結構 | 自由格式，靠「現行／歸檔」分區 | **11 欄寫死**（①專案規則→⑪怎麼找回） |
-| 白板時間維度 | 混入「### 2026-11-09 晚」式日期流水 | **廢除**。只留 ⑦上一回（重啟用）＋⑧近 5 輪（離題偵測用） |
-| 交付申報 | 「宣佈白板」（只報 id） | **強制更新報告**：11 項逐欄交代更新／未變＋理據 |
-| 死板偵測 | 靠 agent 自覺 | **`verify_whiteboard.py` 機械抓**：時間戳落後 >10 分鐘＝FAIL |
-| 防膨脹 | 無 | ⑧ 條數 >5 ＝FAIL；11 欄每欄只放夠用 |
-| 安裝器 | 5 步 | **6 步**（加裝驗證器） |
-| 驗證器 | 10 項 | **22 項** |
+| Was `SESSION-RULES` ever loaded by the runtime? | `grep -rn "SESSION-RULES" --include="*.py"` across the whole agent source | **0 hits** |
+| Was `RULES.md` in the auto-injection list? | inspect `agent/coding_context.py` `_CONTEXT_FILES` | **not present** (L86) |
+| The file containing the most important rule ("don't be terse") | created 2026-11-08, audited 2026-11-09 | **loaded zero times** |
 
-**為什麼要升**：v1.0 落地後主人一句話打中死穴——**「白板是死板：主人不講，我不更新；有冇更新，主人驗不到。」** v1.0 有骨架冇強制，有宣佈冇驗證，所以白板會慢慢腐爛成日誌。v2.0 補的就是這兩刀。
+The rules existed. They were never read. Every turn a note said "rules read ✅" — true of the agent's belief, false of the machine's behaviour.
 
----
+> **A rule that was written but never took effect is more dangerous than no rule at all — it manufactures the illusion of being governed.**
 
-## 一、解決什麼問題
-
-### 症狀
-
-每輪該讀的規則寫在 `RULES.md` 和 `SESSION-RULES-<session_id>.md` 裡，但實際上**從來沒被讀過**。
-
-### 實測證據（不是推測）
-
-| 檢查 | 命令 | 結果 |
-|---|---|---|
-| 源碼有沒有載入 `SESSION-RULES`？ | `grep -rn "SESSION-RULES" --include="*.py"` 掃整個 `hermes-agent` | **0 命中** |
-| `RULES.md` 在不在自動注入清單？ | 查 `agent/coding_context.py` 的 `_CONTEXT_FILES` | **不在**（L86） |
-| 那份寫了「禁惜字如金」的 `SESSION-RULES` | 建檔 2026-11-08，到 11-09 | **一次都沒被載入過** |
-
-### 根因
-
-Hermes 每輪唯一保證會注入的是專案根目錄的 `AGENTS.md`（及 `CLAUDE.md`、`.cursorrules`）。其他任何「每輪必讀」的檔，都要靠 agent 主動去讀——而**主動去讀**這件事本身就是那條規則想約束的行為，這是循環依賴，必然失效。
-
-> **寫了但沒生效的規則，比沒寫更危險——它製造「已經管住了」的假象。**
+That is the failure mode this project addresses: not missing capability, but **silent divergence between what the system claims and what it does**.
 
 ---
 
-## 二、解法
+## The fix, in one table
 
-| 舊 | 新 |
+| Old approach | What Whiteboard does instead |
 |---|---|
-| `RULES.md` 每輪讀（假） | `AGENTS.md` **B1 · 開場：讀自己的白板** |
-| `SESSION-RULES-<id>.md` 每輪讀（假） | `<白板根>\<session_id>.md` 一塊 **11 欄**專屬白板 |
-| 用字數上限控制檔案大小 | 用 **白板骨架：11 欄**逼每欄只放夠用 |
-| 每輪末「宣佈已讀」（假） | **B5 · 強制更新報告**：11 項逐欄交代＋落 `verify_whiteboard.py` |
+| `RULES.md` read every turn (assumed) | Template injected from `AGENTS.md`, the only file the runtime guarantees to load |
+| `SESSION-RULES-<id>.md` per session (assumed) | `<whiteboard_root>/<session_id>.md` — one 11-field board per session |
+| Cap file size with an arbitrary character limit | Cap *content per field* — 11 fields with fixed responsibilities |
+| "Announce board read ✅" at end of turn | **Mandatory update report**: all 11 fields accounted for, each marked updated / unchanged **with a reason** |
 
-### B1：開場六步
+---
 
-1. **確認身份** —— 跑 `echo $HERMES_SESSION_ID`，這是硬事實不是猜的
-2. **開自己的白板** —— `<白板根>\<那串 id>.md`
-3. **不存在就建**（禁止零塊）—— 照 11 欄骨架建，每欄填「待定」都算有板，**禁止建空檔**
-4. **核時效＋機械驗證** —— 讀檔頭「最後更新」，落後＝死板，即場補寫；再跑 `verify_whiteboard.py --session $HERMES_SESSION_ID`，**非 PASS 即場修到 PASS，唔准帶 FAIL 開工**
-5. **讀 11 欄** —— 「歸檔」區不讀
-6. **開場第一句宣告** —— `白板 <id> 已讀｜目標：<X>｜要點：<三句>｜輪次：第 <N> 輪｜` ＋ 完整路徑
+## The 11 fields
 
-### 白板骨架：11 欄
+One board per session. Nothing else.
 
-| 欄 | 內容 | 只放什麼 |
+| # | Field | Holds |
 |---|---|---|
-| ① | 專案專屬規則 | 主人填，agent 只讀不改 |
-| ② | 目標／要解決什麼 | 這一輪為何存在 |
-| ③ | 當前專案 | 根目錄／主檔／ToDo 來源／最後在做什麼（全路徑） |
-| ④ | ToDo List | **專案 ToDo 的鏡像**，雙向同步 |
-| ⑤ | 任務清單 | session 內調度：處理中／排隊 1／排隊 2 |
-| ⑥ | 已完成 | **只留結論**，細節住專案 |
-| ⑦ | 上一回做了什麼 | ≤3 句（session 重啟用） |
-| ⑧ | 近 5 輪對話 | 滑動窗口（**離題偵測用**） |
-| ⑨ | 未做／下一步 | — |
-| ⑩ | 下下步 | — |
-| ⑪ | 怎麼找回當前狀態 | 白板本體路徑＋骨架定義位置＋開場流程位置 |
+| ① | Project rules | Written by the human, read-only for the agent |
+| ② | Goal | Why this session exists |
+| ③ | Current project | Root path / main file / ToDo source / what was last touched |
+| ④ | ToDo list | Mirror of the project ToDo, kept in sync |
+| ⑤ | Task queue | In progress / queued 1 / queued 2 |
+| ⑥ | Done | **Conclusions only** — details live in the project |
+| ⑦ | Last turn | ≤3 sentences, for session restart |
+| ⑧ | Last 5 turns | Sliding window, **for drift detection** |
+| ⑨ | Next | — |
+| ⑩ | After that | — |
+| ⑪ | How to resume | Board path + schema location + entry-point location |
 
-**⑦ 與 ⑧ 為何要分兩欄**（v1.0 只有一欄已讀紀錄）：
+**Why ⑦ and ⑧ are separate.** ⑦ answers *"what did I just do"* — restart fuel. ⑧ answers *"have my last 5 turns drifted off the goal"* — drift detection. After ten turns discussing something unrelated, ⑧ shows five consecutive off-topic entries; ⑦ alone can't distinguish "just drifted" from "drifted long ago."
 
-- ⑦ 答「我上一輪做咗咩」——重啟用。
-- ⑧ 答「我最近 5 輪係唔係都在講同一件事」——**離題偵測用**。離題傾俄烏十輪後返嚟，⑧ 一眼顯示「最近 5 輪全部係俄烏，冇碰過正事」，⑦ 分不出這是「剛離題」還是「離題很久」。
-
-**為什麼廢除日期流水節**：實測 5 塊白板有 5 種結構，最嚴重兩塊用 `### 2026-11-09 晚｜某某` 逐日記帳，4,503 chars。離題 100 輪返嚟，見到一堆日期，**唔知邊個係「而家要做的事」**。日期流水屬日誌（`evolution-log.md`），不屬白板。
-
-### B5：強制更新報告
-
-```
-> 白板：<id>｜完整路徑：C:\...\白板\<id>.md
-> 更新：④✅ ⑦✅ ⑧✅ ⑨✅
-> 未變：①②③⑤⑥⑩⑪｜理據：①主人未改規則 ②目標未變 ③專案未轉 ⑤任務序無新決策 ⑥本輪無新完成項 ⑩承接⑨ ⑪位置未變
-> 提醒下一輪的我：記得讀自己的白板。
-```
-
-**四條硬規矩**：
-
-1. **11 項一項都唔准唔提**——靜默一項＝藏了一個沒做的判斷
-2. **未變必寫理據**（講唔出＝該欄有問題，該砍或該合併）
-3. **做唔到寫 ❌＋原因**，唔准假裝 ✅
-4. **理據要具體**，唔准「無變化」四字了事
+**Why dated log sections were removed.** Five boards had five different structures. The worst used `### 2026-11-09 evening | topic` day-by-day accounting — 4,503 characters. Returning after 100 off-topic turns, the reader sees a pile of dates and still cannot tell which one is *now*. A schema that every board follows beats a format every board interprets.
 
 ---
 
-## 三、包裡有什麼
+## The validator
 
-```
-E-356-357_白板系統\
-├── README.md                       ← 你正在讀的這份（教程）
-├── manifest.json                   ← 包元數據＋檔案 sha256
-├── install.py                      ← 一鍵安裝（6 步、冪等、先備份、路徑可換）
-├── verify.py                       ← 一鍵驗證（22 項 PASS/FAIL）
-└── payload\
-    ├── SKILL.md                    ← whiteboard-system 技能全文（15 節）
-    ├── AGENTS-要插入的段落.md        ← 要插進 AGENTS.md 的 B1／B5 原文
-    ├── verify_whiteboard.py        ← 每輪跑的死板偵測器（5 項檢查）
-    ├── 模板-白板.md                  ← 11 欄白板模板
-    ├── 模板-白板索引.md              ← 白板索引模板
-    └── RULES-退役公告.md             ← 舊 RULES.md 改成退役公告的模板
-```
-
-**資源 ＋ 教程**是這個包的兩個必要成分：`payload\` 是可搬的資源，`README.md` ＋ `install.py`／`verify.py` 是怎麼搬與怎麼確認搬對了。只有資源沒有教程，下一個 agent 拿到也不知道怎麼用；只有教程沒有資源，它要重寫一遍。
-
----
-
-## 四、怎麼裝
-
-### 路線 A：一鍵（推薦先 dry-run 看會做什麼）
+One file, five checks, exits non-zero on failure.
 
 ```bash
-cd "E:\資產\進化包\E-356-357_白板系統"
-python install.py --dry-run
-python install.py
+python verify_whiteboard.py --session $HERMES_SESSION_ID
 ```
 
-自動偵測：`%LOCALAPPDATA%\hermes`（或 `HERMES_HOME`／`~/.hermes`）、`AGENTS.md`（當前目錄或家目錄）、白板根（預設 `~/白板`）。
+```
+█ 20261012_085850_9d3077d8  ✅ PASS  [6342 B]
+   fields 11/11 | staleness board 03:23 vs reply 03:23 | last5 5 | mirror — | log-sections 0
+```
 
-> ⚠️ **白板根預設是 `~/白板`，不是你的工作空間根。** 若你的白板不在家目錄（例如 `C:\Shinemind\白板`），**必須用 `--whiteboard-dir` 覆寫**，否則 install.py 會把錯誤路徑寫進 AGENTS.md，而 dry-run 看起來一切正常。
->
-> 建議：先跑 dry-run，**逐字核對輸出裡「白板根目錄」那一行**是不是你要的位置，再真裝。
+| # | Check | Fails when |
+|---|---|---|
+| 1 | All 11 fields present | any field missing |
+| 2 | Header timestamp vs last reply in session DB | behind by >10 min ⇒ **stale board** |
+| 3 | ⑧ entry count | more than 5 |
+| 4 | ④ mirror source file exists | path is dead |
+| 5 | No dated log sections | any `### <date>` heading present |
 
-### 路線 B：指定路徑
+`--json` for machine consumption, `--lag` to tune the staleness tolerance. A session dormant for more than 6 hours degrades to a warning instead of a failure — a board that will never move again shouldn't be punished for not moving, but the condition stays visible.
+
+The staleness check is the one that matters. Everything else verifies shape; check 2 verifies **the board is actually being maintained**, which is the failure mode that motivated the project.
+
+---
+
+## Quick start
+
+```bash
+git clone https://github.com/Shinemind-ops/agent-whiteboard-system
+cd agent-whiteboard-system
+
+python install.py --dry-run     # show every path it will touch
+python install.py               # apply
+python verify.py                # 22/22 PASS means it actually landed
+```
+
+The installer detects `%LOCALAPPDATA%\hermes` (or `HERMES_HOME` / `~/.hermes`), your `AGENTS.md`, and the whiteboard root (`~/白板` by default). It is idempotent, backs up before writing, and every path is overridable:
 
 ```bash
 python install.py \
-  --agents "C:\Users\you\AGENTS.md" \
-  --whiteboard-dir "C:\Users\you\白板" \
-  --hermes-dir "C:\Users\you\AppData\Local\hermes"
+  --agents "$HOME/AGENTS.md" \
+  --whiteboard-dir "$HOME/whiteboard" \
+  --hermes-dir "$HOME/.hermes"
 ```
 
-### 路線 C：手動
+> **The default whiteboard root is `~/白板`, not your workspace root.** If your boards live elsewhere, override with `--whiteboard-dir`, or the installer will create a second, empty board directory and the validator will happily pass on the wrong one.
 
-1. 開 `payload\AGENTS-要插入的段落.md`，把 **B1 段**插到 `AGENTS.md` 的「一輪流程」之下（動作流第一位）。
-2. 把 **B5 段**插到動作流末尾（若檔內有「其餘規矩在哪找」之類的尾部章節，插在它前面）。
-3. **把段內佔位符換成你的實際路徑**：`<白板根>`、`<hermes 目錄>`（install.py 會自動做，手動的話這步最容易漏）。
-4. 把 `payload\SKILL.md` 複製到 `<hermes>\skills\meta\whiteboard-system\SKILL.md`。
-5. 把 `payload\verify_whiteboard.py` 複製到 `<hermes>\scripts\verify_whiteboard.py`。
-6. 建 `<白板根>\` 與 `<白板根>\歸檔\`，用模板建 `白板索引.md` 和本 session 的 11 欄板。
-7. 舊 `RULES.md` 改寫成 `payload\RULES-退役公告.md` 的樣子（或直接刪——但**先備份**）。
+`verify.py` runs 22 checks across the installed tree — `AGENTS.md` contains the required sections with real paths interpolated, the skill file has all 15 sections, the board has 11 fields, no hardcoded paths belonging to another machine, `manifest.json` hashes match on-disk files.
 
-### 裝完之後
+---
 
-```bash
-python verify.py
+## Design notes: three things I got wrong first
+
+### 1. A schema without enforcement rots
+
+v1.0 defined two zones — "current" and "archive" — and nothing else. No field list, no size limit, no validator. Five boards grew five structures. Rules that specify only *where* to write, without specifying *what* or *who checks*, specify nothing.
+
+The fix was not more rules. It was **fixing the field list** and adding **a machine that counts**. Human-defined rules drift; machine-counted numbers don't.
+
+### 2. A report format must be falsifiable
+
+v1.0's end-of-turn announcement was `Board <id> read`. **Reporting the wrong id still passed**, because no part of it could be contradicted.
+
+v2.0 requires all 11 fields to be accounted for, each marked updated or unchanged *with a reason*. Stay silent on one and it shows. Write "unchanged" without a reason and it shows. **The format itself becomes the audit** — no separate review needed.
+
+### 3. Multiple sessions edit the same rules concurrently
+
+Three sessions were active simultaneously, all working on the same system. A board written by one was rewritten by the session that owned it — with no data loss, and the rewrite was *more* accurate, containing facts (real turn count, a tool-call limit that interrupted a run) the original author didn't know.
+
+That isn't chaos; it's the rule system actually running. But it means **read current state before writing** — overwriting from memory will delete a sibling's improvement.
+
+### Addendum: a check that existed but could never fail
+
+The first version of `verify.py` shipped a check called *"whiteboard paths are local, none hardcoded from another machine."* It printed PASS. It had a name, a green tick, a place in the 22-item list.
+
+It never checked anything.
+
+```python
+PLACEHOLDER_WB = r'C:\\Shinemind\\白板'          # value contains doubled backslashes
+nrm = lambda x: x.replace('\\\\', '/')          # only replaces doubled backslashes
 ```
 
-**22 項全 PASS 才算裝好。** 任何一項 FAIL，代表這項進化沒有真正落地——尤其這三項：
+Real paths use single backslashes, so they were never normalised. The placeholder's own doubled backslashes normalised to a form that could never equal the single-backslash paths in `AGENTS.md`. The set was always empty ⇒ the condition was always true ⇒ always PASS.
 
-- 「B1 含機械驗證步驟」——驗的是「下一輪會唔會真的跑驗證器」
-- 「skill 含 11 欄骨架定義」——驗的是「骨架有冇真係落咗喺 skill 裡」
-- 「白板 11 欄齊全」——驗的是「板係唔係真的照骨架建」
+It was rewritten to detect *any* foreign user path generically — no hardcoded usernames, comparing against `$USERNAME` from the environment — and verified with a **negative test**: inject `C:\Users\SomeGuy` into a copy and confirm it fails.
 
-### 日常怎麼跑
-
-安裝完之後，每輪開場跑：
-
-```bash
-python "<hermes>\scripts\verify_whiteboard.py" --session $HERMES_SESSION_ID
+```
+clean install      → [PASS] AGENTS.md contains no foreign machine paths
+path injected      → [FAIL] found C:\Users\SomeGuy
 ```
 
-| # | 檢查 | 失敗判定 |
-|---|---|---|
-| 1 | 11 欄存在 | 缺欄＝FAIL |
-| 2 | 檔頭時間 vs `state.db` 該 session 最後回覆 | 落後 >10 分鐘＝**死板** FAIL |
-| 3 | ⑧ 條數 ≤5 | 超額＝FAIL |
-| 4 | ④ 鏡像來源檔存在 | 路徑死＝FAIL |
-| 5 | 冇日期流水節 | 有＝FAIL |
-
-加 `--json` 給機器讀，`--lag` 調落後容忍分鐘數。**session 已終止（沉睡 >6 小時）走降級警告，不判 FAIL**——板不會再動，用時效罰它沒意義，但保留可見性。
+A test that has never failed is not evidence. This is the same lesson as the opening table, one level down: **the check was written, was reported as passing, and governed nothing.**
 
 ---
 
-## 五、原理：為什麼是 AGENTS.md
+## What's in the box
 
-Hermes 的 `prompt_builder` 每輪會把專案根目錄的 context file 注入 system prompt。這是**唯一**不需要 agent 主動做任何事就會發生的注入點。
+```
+agent-whiteboard-system/
+├── README.md              ← this file
+├── README.zh.md           ← original Chinese documentation
+├── LICENSE                ← MIT
+├── manifest.json          ← package metadata + sha256 of every file
+├── install.py             ← 6-step installer, idempotent, backs up first
+├── verify.py              ← 22-check verifier for the installed tree
+└── payload/
+    ├── SKILL.md                    ← skill definition (15 sections)
+    ├── AGENTS-template.md          ← the B1 / B5 sections to insert into AGENTS.md
+    ├── verify_whiteboard.py        ← the 5-check per-turn validator
+    ├── template-board.md           ← 11-field board template
+    ├── template-index.md           ← board index template
+    └── RULES-retirement.md         ← template converting a dead RULES.md into a notice
+```
 
-所以判準不是「這內容重不重要」，而是：
-
-> **這一輪它沒被讀到，我會不會做錯事？**
-
-會 → 放 `AGENTS.md`。
-不會，但某類任務需要 → 放 Process／Skill／Guide，讓它在撞到時才開。
-
-這條結構推翻了三個舊做法：
-- 「每輪必讀六個檔」→ 實際一個都沒讀
-- 「用字數上限控制注入檔大小」→ 上限是假尺，該問的是「這條每輪真的用得上嗎」
-- 「靠自制力記得讀」→ **自制力不是機制；能被機器驗的，不要靠自覺**
-
----
-
-## 六、v2.0 的三條設計教訓
-
-### 教訓一：有骨架冇強制，骨架會腐爛
-
-v1.0 定了「現行／歸檔」兩區，但冇講每區要放咩欄、每欄放幾多、邊個驗。結果 5 塊板長出 5 種結構，最肥一塊 4,503 chars——**規則定了分區，等於冇定任何事**。
-
-修法不是加更多規則，是**把欄位寫死**（11 欄，每欄有明確職責），再加**機器驗**（數字超咗就 FAIL）。人定的規則會漂，機器數的不會。
-
-### 教訓二：申報格式要能證偽
-
-v1.0 的「宣佈白板」只報 id——**報錯 id 都算合格**，因為冇任何一項能被反駁。
-
-v2.0 要求 11 項逐欄交代「更新／未變＋理據」。靜默一項就露餡；寫「未變」但講不出理據，也露餡。**格式本身變成檢查器**，不需要額外審計。
-
-### 教訓三：多個 session 會同時改同一套規則
-
-實測三個 session 同時活躍，全部在做同一件事。我寫的板被該 session 自己重寫（查實**零流失**，而且它寫得更準——有真實輪次 51、40 次工具上限中斷等我不知的事實）；我給驗證器加參數，sibling 已用更好的設計（`STALE_HOURS = 6` 模組常數＋降級警告）。
-
-**這不代表混亂，代表這套規則真的在跑，多個 session 自發對齊。** 但落刀前必須先讀現狀，不准憑記憶覆蓋——否則會把 sibling 更好的改良砍掉。
+**Resource plus tutorial is the point.** `payload/` is what gets moved; `README.md` + `install.py` + `verify.py` are how you confirm it moved correctly. A package with only resources assumes the reader will figure out the integration; a package with only a tutorial can't be applied.
 
 ---
 
-## 七、附帶教訓：改一個 skill 有五個登記面（E-357）
+## Why `AGENTS.md`
 
-把 `rules-governance` 重寫成 `whiteboard-system` 時，`skill_manage delete` 回報成功、`os.path.exists` 也確認舊目錄真的不見了——**但兩份 `SkillList` 仍列舊名**。
+The runtime injects context files from the project root into the system prompt every turn. That is the **only** injection that happens without the agent taking any action.
 
-**兩關驗的都是「目錄沒了」，沒有一關驗「登記改了沒有」。**
+So the selection criterion isn't *"is this content important"* — it's:
 
-| # | 登記面 | 性質 |
-|---|---|---|
-| 1 | `SkillList.md` | 必做 |
-| 2 | `SkillList(主人專用).md` | 必做 |
-| 3 | `SkillList(副本).md` | 有副本層才做 |
-| 4 | 全庫指向舊路徑的引用 | 要判斷（路徑形式＝死鏈；純文字＝史實） |
-| 5 | 新 skill 的「血統」句 | 保留 |
+> **If this isn't read this turn, will I do something wrong?**
 
-對稱事故：建 skill 沒登記＝**幽靈技能**（索引查不到、永不路由）；改名沒改登記＝**反向幽靈行**（索引寫舊名、載入撲空）。根因同一個：**把檔案動作當成登記動作**。
+Yes → `AGENTS.md`.
+No, but it matters for certain task types → a skill or process doc, loaded when the relevant task appears.
 
-第二層陷阱：只換路徑不夠。原句寫「睇『鐵律一：分類權在主人』」，但新 skill 根本沒這個標題——**路徑對了，節名死了**。改指新 skill 之後要開新 skill 核對引用的節名還在不在。
+This ordering replaced three earlier habits: "read six files every turn" (none were read), "cap injected files by character count" (the cap was invented, never sourced — and it was used to justify cutting real content), and "remember to read it" (willpower is not a mechanism).
 
-> E-358 同一個病重犯：SKILL.md 已 15 節，兩份 SkillList 仍寫「十節」——**節名清單就是登記面之一**。
+**Anything a machine can verify should not rely on self-discipline.**
 
 ---
 
-## 八、血統
+## Requirements
 
-| 項 | 值 |
-|---|---|
-| 進化編號 | E-356（建立）＋ E-357（收尾補登記）＋ E-358（11 欄骨架＋機械驗證） |
-| 存檔 | B-297、B-298 |
-| v2.0 日期 | 2026-11-10 |
-| 前身 | `rules-governance` skill（治理哲學）→ 併入 `whiteboard-system`（操作手冊） |
-| 更前身 | `RULES.md` 五條 ＋ `SESSION-RULES-<id>.md`（已退役） |
-| 產生日期 | 2026-11-09（v1.0）／2026-11-10（v2.0） |
+- Python 3.8+
+- Any agent runtime that injects a project-root context file each turn (built and tested against [Hermes Agent](https://hermes-agent.nousresearch.com/); the schema and validator are runtime-agnostic, only `install.py`'s auto-detection is Hermes-specific)
 
-舊版全文在 `E:\鏡中世界\` 備份裡；若你沒有鏡中世界，從你自己的 git 歷史找。v1.0 的 install.py／verify.py／README／manifest 已於升級前備份為 `*.YYYYMMDD-HHMMSS.bak`。
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).
